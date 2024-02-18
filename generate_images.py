@@ -8,7 +8,6 @@ import aiohttp
 
 from github_stats import Stats
 
-
 ################################################################################
 # Helper Functions
 ################################################################################
@@ -101,11 +100,10 @@ async def main() -> None:
     """
     access_token = os.getenv("ACCESS_TOKEN")
     if not access_token:
-        # access_token = os.getenv("GITHUB_TOKEN")
         raise Exception("A personal access token is required to proceed!")
-    user = os.getenv("GITHUB_ACTOR")
+    user = os.getenv("USERNAME")
     if user is None:
-        raise RuntimeError("Environment variable GITHUB_ACTOR must be set.")
+        raise RuntimeError("Environment variable USERNAME must be set.")
     exclude_repos = os.getenv("EXCLUDED")
     excluded_repos = (
         {x.strip() for x in exclude_repos.split(",")} if exclude_repos else None

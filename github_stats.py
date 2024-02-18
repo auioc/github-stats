@@ -2,10 +2,19 @@
 
 import asyncio
 import os
-from typing import Dict, List, Optional, Set, Tuple, Any, cast
+import sys
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 import aiohttp
 import requests
+
+
+def info(s):
+    print(f"[INFO] {s}")
+
+
+def warn(s):
+    print(f"[WARN] {s}", file=sys.stderr)
 
 
 ###############################################################################
@@ -89,8 +98,7 @@ class Queries(object):
                         params=tuple(params.items()),
                     )
                 if r_async.status == 202:
-                    # print(f"{path} returned 202. Retrying...")
-                    print(f"A path returned 202. Retrying...")
+                    warn(f"{path} returned 202. Retrying...")
                     await asyncio.sleep(2)
                     continue
 
@@ -98,7 +106,7 @@ class Queries(object):
                 if result is not None:
                     return result
             except:
-                print("aiohttp failed for rest query")
+                warn("aiohttp failed for rest query")
                 # Fall back on non-async requests
                 async with self.semaphore:
                     r_requests = requests.get(
@@ -107,13 +115,12 @@ class Queries(object):
                         params=tuple(params.items()),
                     )
                     if r_requests.status_code == 202:
-                        print(f"A path returned 202. Retrying...")
+                        warn(f"{path} returned 202. Retrying...")
                         await asyncio.sleep(2)
                         continue
                     elif r_requests.status_code == 200:
                         return r_requests.json()
-        # print(f"There were too many 202s. Data for {path} will be incomplete.")
-        print("There were too many 202s. Data for this repository will be incomplete.")
+        warn(f"There were too many 202s. Data for {path} will be incomplete.")
         return dict()
 
     @staticmethod
@@ -273,6 +280,8 @@ class Stats(object):
         self._repos: Optional[Set[str]] = None
         self._lines_changed: Optional[Tuple[int, int]] = None
         self._views: Optional[int] = None
+        info(f"Username: {username}")
+        info(f"Ignore forked repos: {ignore_forked_repos}")
 
     async def to_str(self) -> str:
         """
@@ -344,6 +353,7 @@ Languages:
                 if name in self._repos or name in self._exclude_repos:
                     continue
                 self._repos.add(name)
+                info(f"Found repo: {name}")
                 self._stargazers += repo.get("stargazers").get("totalCount", 0)
                 self._forks += repo.get("forkCount", 0)
 
@@ -468,10 +478,10 @@ Languages:
             .get("viewer", {})
             .values()
         )
-        for year in by_year:
-            self._total_contributions += year.get("contributionCalendar", {}).get(
-                "totalContributions", 0
-            )
+        for i, year in enumerate(by_year):
+            year_c = year.get("contributionCalendar", {}).get("totalContributions", 0)
+            info(f"Contributions of year {years[i]}: {year_c}")
+            self._total_contributions += year_c
         return cast(int, self._total_contributions)
 
     @property
@@ -495,9 +505,14 @@ Languages:
                 if author != self.username:
                     continue
 
+                repo_add = 0
+                repo_del = 0
                 for week in author_obj.get("weeks", []):
-                    additions += week.get("a", 0)
-                    deletions += week.get("d", 0)
+                    repo_add += week.get("a", 0)
+                    repo_del += week.get("d", 0)
+                info(f"Lines changed of repo {repo}: +{repo_add}, -{repo_del}")
+                additions += repo_add
+                deletions += repo_del
 
         self._lines_changed = (additions, deletions)
         return self._lines_changed
@@ -514,8 +529,11 @@ Languages:
         total = 0
         for repo in await self.repos:
             r = await self.queries.query_rest(f"/repos/{repo}/traffic/views")
+            repo_views = 0
             for view in r.get("views", []):
-                total += view.get("count", 0)
+                repo_views += view.get("count", 0)
+            info(f"Views of repo {repo}: {repo_views}")
+            total += repo_views
 
         self._views = total
         return total
@@ -531,10 +549,10 @@ async def main() -> None:
     Used mostly for testing; this module is not usually run standalone
     """
     access_token = os.getenv("ACCESS_TOKEN")
-    user = os.getenv("GITHUB_ACTOR")
+    user = os.getenv("USERNAME")
     if access_token is None or user is None:
         raise RuntimeError(
-            "ACCESS_TOKEN and GITHUB_ACTOR environment variables cannot be None!"
+            "ACCESS_TOKEN and USERNAME environment variables cannot be None!"
         )
     async with aiohttp.ClientSession() as session:
         s = Stats(user, access_token, session)
