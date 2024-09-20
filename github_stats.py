@@ -98,7 +98,7 @@ class Queries(object):
                         params=tuple(params.items()),
                     )
                 if r_async.status == 202:
-                    warn(f"{path} returned 202. Retrying...")
+                    # warn(f"{path} returned 202. Retrying...")
                     await asyncio.sleep(2)
                     continue
 
@@ -115,7 +115,7 @@ class Queries(object):
                         params=tuple(params.items()),
                     )
                     if r_requests.status_code == 202:
-                        warn(f"{path} returned 202. Retrying...")
+                        # warn(f"{path} returned 202. Retrying...")
                         await asyncio.sleep(2)
                         continue
                     elif r_requests.status_code == 200:
@@ -184,6 +184,10 @@ class Queries(object):
         endCursor
       }}
       nodes {{
+        owner {{
+            login
+        }}
+        name
         nameWithOwner
         stargazers {{
           totalCount
@@ -264,12 +268,12 @@ class Stats(object):
         session: aiohttp.ClientSession,
         exclude_repos: Optional[Set] = None,
         exclude_langs: Optional[Set] = None,
-        ignore_forked_repos: bool = False,
+        include_owners: Optional[Set] = None,
     ):
         self.username = username
-        self._ignore_forked_repos = ignore_forked_repos
         self._exclude_repos = set() if exclude_repos is None else exclude_repos
         self._exclude_langs = set() if exclude_langs is None else exclude_langs
+        self._include_owners = set() if include_owners is None else include_owners
         self.queries = Queries(username, access_token, session)
 
         self._name: Optional[str] = None
@@ -281,7 +285,9 @@ class Stats(object):
         self._lines_changed: Optional[Tuple[int, int]] = None
         self._views: Optional[int] = None
         info(f"Username: {username}")
-        info(f"Ignore forked repos: {ignore_forked_repos}")
+        info(f"Exclude repos: {exclude_repos}")
+        info(f"Exclude langs: {exclude_langs}")
+        info(f"Include owners: {include_owners}")
 
     async def to_str(self) -> str:
         """
@@ -343,17 +349,23 @@ Languages:
             )
 
             repos = owned_repos.get("nodes", [])
-            if not self._ignore_forked_repos:
-                repos += contrib_repos.get("nodes", [])
+
+            for repo in contrib_repos.get("nodes", []):
+                if repo.get("owner", {}).get("login", "") in self._include_owners:
+                    repo["owned"] = False
+                    repos.append(repo)
 
             for repo in repos:
                 if repo is None:
                     continue
+
                 name = repo.get("nameWithOwner")
                 if name in self._repos or name in self._exclude_repos:
                     continue
                 self._repos.add(name)
-                info(f"Found repo: {name}")
+                info(
+                    f"Found repo: {name} ({'Owned' if repo.get('owned',True) else 'Contributed'})"
+                )
                 self._stargazers += repo.get("stargazers").get("totalCount", 0)
                 self._forks += repo.get("forkCount", 0)
 

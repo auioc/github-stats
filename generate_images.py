@@ -104,7 +104,7 @@ async def main() -> None:
     user = os.getenv("USERNAME")
     if user is None:
         raise RuntimeError("Environment variable USERNAME must be set.")
-    exclude_repos = os.getenv("EXCLUDED")
+    exclude_repos = os.getenv("EXCLUDED_REPOS")
     excluded_repos = (
         {x.strip() for x in exclude_repos.split(",")} if exclude_repos else None
     )
@@ -112,12 +112,11 @@ async def main() -> None:
     excluded_langs = (
         {x.strip() for x in exclude_langs.split(",")} if exclude_langs else None
     )
-    # Convert a truthy value to a Boolean
-    raw_ignore_forked_repos = os.getenv("EXCLUDE_FORKED_REPOS")
-    ignore_forked_repos = (
-        not not raw_ignore_forked_repos
-        and raw_ignore_forked_repos.strip().lower() != "false"
+    include_owners = os.getenv("INCLUDED_OWNERS")
+    included_owners = (
+        {x.strip() for x in include_owners.split(",")} if include_owners else None
     )
+
     async with aiohttp.ClientSession() as session:
         s = Stats(
             user,
@@ -125,7 +124,7 @@ async def main() -> None:
             session,
             exclude_repos=excluded_repos,
             exclude_langs=excluded_langs,
-            ignore_forked_repos=ignore_forked_repos,
+            include_owners=included_owners,
         )
         await asyncio.gather(generate_languages(s), generate_overview(s))
 
